@@ -43,10 +43,14 @@ layout: default
 {% endif %}
 
 {% if site.status_endpoint and site.status_endpoint != '' %}
-<section id="services" hidden>
+<section id="services">
 <h2 class="services__title">Services</h2>
-<ul id="services-list" class="services"></ul>
-<p id="services-checked" class="window"></p>
+<ul id="services-list" class="services">
+{% for service in site.services %}
+<li class="service" data-name="{{ service }}"><span>{{ service }}</span><span class="chip chip--service-unknown">Unknown</span></li>
+{% endfor %}
+</ul>
+<p id="services-checked" class="window">Checking&hellip;</p>
 </section>
 {% endif %}
 
@@ -97,17 +101,50 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
 })();
 {% if site.status_endpoint and site.status_endpoint != '' %}
 
-// Live per-service state, probed inside the cluster by JupyterHub. This is the
-// only part of the page that depends on the platform being up, so it is kept
-// strictly additive: if the fetch fails, the section stays hidden and the
-// announcements above -- which are static and survive a full outage -- are
-// still the page's answer.
+// Live per-service state, probed inside the cluster by JupyterHub.
+//
+// The rows are already on the page as "Unknown"; this fills them in. If the
+// endpoint cannot be reached, JupyterHub is marked down -- it serves the
+// endpoint, so an unreachable endpoint means an unreachable Hub -- and the
+// rest stay unknown, because with the prober down nothing can be said about
+// them. Going blank here would fail at the one job this page has.
 (function () {
-  var section = document.getElementById('services');
+  var LABELS = { ok: 'Operational', degraded: 'Degraded', down: 'Down' };
   var list = document.getElementById('services-list');
   var checked = document.getElementById('services-checked');
-  if (!section || !list) {
+  if (!list) {
     return;
+  }
+
+  function setState(row, state) {
+    var chip = row.querySelector('.chip');
+    if (!chip) {
+      return;
+    }
+    // An unrecognized state is shown verbatim in the neutral style rather than
+    // being coerced into "Operational".
+    chip.className = 'chip chip--service-' + (LABELS[state] ? state : 'unknown');
+    chip.textContent = LABELS[state] || state;
+  }
+
+  function rowFor(name) {
+    var existing = list.querySelector('[data-name="' + CSS.escape(name) + '"]');
+    if (existing) {
+      return existing;
+    }
+    // Reported but not in the configured list: append rather than drop it, so
+    // the list drifting out of date degrades instead of hiding a service.
+    var li = document.createElement('li');
+    li.className = 'service';
+    li.setAttribute('data-name', name);
+    var label = document.createElement('span');
+    label.textContent = name;
+    var chip = document.createElement('span');
+    chip.className = 'chip chip--service-unknown';
+    li.appendChild(label);
+    li.appendChild(chip);
+    list.appendChild(li);
+    return li;
   }
 
   fetch({{ site.status_endpoint | jsonify }}, { cache: 'no-store' })
@@ -120,32 +157,32 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
     .then(function (data) {
       var services = (data && data.services) || [];
       if (!services.length) {
-        return;
+        throw new Error('empty response');
       }
+      var reported = {};
       services.forEach(function (service) {
-        var li = document.createElement('li');
-        li.className = 'service';
-        var name = document.createElement('span');
-        name.textContent = service.name;
-        var chip = document.createElement('span');
-        // Anything unrecognized is shown verbatim in the neutral style rather
-        // than being silently coerced into "ok".
-        var known = { ok: 'Operational', degraded: 'Degraded', down: 'Down' };
-        chip.className = 'chip chip--service-' + (known[service.state] ? service.state : 'unknown');
-        chip.textContent = known[service.state] || service.state;
-        li.appendChild(name);
-        li.appendChild(chip);
-        list.appendChild(li);
+        reported[service.name] = true;
+        setState(rowFor(service.name), service.state);
       });
-      if (checked && data.checked_at) {
-        checked.textContent = 'Checked ' + new Date(data.checked_at).toUTCString();
+      // Anything configured here but absent from the response stays unknown --
+      // the prober did not speak to it, so neither will we.
+      if (checked) {
+        checked.textContent = data.checked_at
+          ? 'Checked ' + new Date(data.checked_at).toUTCString()
+          : '';
       }
-      section.hidden = false;
     })
     .catch(function () {
-      // Unreachable is expected when the platform is down -- exactly when this
-      // page matters most. Say nothing rather than claim anything.
-      section.hidden = true;
+      var hub = list.querySelector('[data-name="JupyterHub"]');
+      if (hub) {
+        setState(hub, 'down');
+      }
+      if (checked) {
+        // Deliberately hedged: from here, "the platform is unreachable" and
+        // "you cannot reach the platform" look identical.
+        checked.textContent =
+          'Could not reach the platform. It may be down, or your network may be blocking it.';
+      }
     });
 })();
 {% endif %}
