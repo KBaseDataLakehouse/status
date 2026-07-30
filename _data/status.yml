@@ -34,21 +34,70 @@
 #              until you give it an end time. Exclusive: at ends_at exactly,
 #              the announcement is over.
 
-announcements:
-  # Mock entry for verifying the page and the JupyterLab popup end to end.
-  # It expires on its own — no cleanup commit needed.
-  - id: 2026-07-30-render-check
-    message: >-
-      Test announcement — verifying status page rendering and the JupyterLab
-      popup. No action needed; this expires automatically.
-    starts_at: "2026-07-30T20:34:42Z"
-    ends_at: "2026-07-30T21:34:42Z"
+# =========================================================================
+# MOCK DATA — every entry below is fabricated, for design review only.
+# None of these incidents happened. Replace this whole list with `[]`
+# before the page is linked or announced anywhere.
+# =========================================================================
 
-# Copy this shape when adding one, newest at the top of the list:
-#
-#   - id: 2026-08-02-spark-restart
-#     message: >-
-#       Spark clusters restart Saturday 09:00–13:00 PT. Save your work;
-#       running jobs will be interrupted.
-#     starts_at: "2026-08-02T09:00:00Z"
-#     ends_at: "2026-08-02T13:00:00Z"
+announcements:
+  - id: 2026-08-02-polaris-catalog-migration
+    message: >-
+      Scheduled maintenance: Polaris catalog migration. Iceberg table metadata
+      will be read-only for the duration; Spark and Trino queries continue to
+      work but table creation and schema changes will fail.
+    starts_at: "2026-08-02T09:00:00Z"
+    ends_at: "2026-08-02T13:00:00Z"
+
+  - id: 2026-07-30-spark-connect-restart
+    message: >-
+      Spark Connect servers are being restarted to pick up new catalog
+      configuration. Sessions will drop once and reconnect automatically;
+      unsaved notebook state is unaffected.
+    starts_at: "2026-07-30T19:00:00Z"
+    ends_at: "2026-07-30T23:00:00Z"
+
+  - id: 2026-07-24-trino-degraded
+    message: >-
+      Resolved: the Trino coordinator was rejecting queries under load for
+      about two hours. Spark queries were unaffected. Coordinator memory
+      limits have been raised.
+    starts_at: "2026-07-24T14:10:00Z"
+    ends_at: "2026-07-24T16:25:00Z"
+
+  - id: 2026-07-18-s3-elevated-errors
+    message: >-
+      Resolved: elevated S3 error rates caused intermittent read failures in
+      notebooks and CTS jobs. Caused by a failed storage node; the node has
+      been replaced.
+    starts_at: "2026-07-18T03:40:00Z"
+    ends_at: "2026-07-18T07:15:00Z"
+
+  - id: 2026-07-09-jupyterhub-spawn-failures
+    message: >-
+      Resolved: notebook servers failed to start for roughly 45 minutes after
+      a node pool scale-down. Affected users needed to retry once.
+    starts_at: "2026-07-09T17:05:00Z"
+    ends_at: "2026-07-09T17:50:00Z"
+
+  - id: 2026-06-27-cts-nersc-backlog
+    message: >-
+      Resolved: CDM Task Service jobs bound for NERSC Perlmutter queued for
+      several hours during a scheduled Perlmutter outage. No jobs were lost.
+    starts_at: "2026-06-27T08:00:00Z"
+    ends_at: "2026-06-27T18:30:00Z"
+
+  - id: 2026-06-15-hive-metastore-maintenance
+    message: >-
+      Completed: Hive Metastore database maintenance. Delta table metadata was
+      briefly unavailable; Iceberg tables served from Polaris were unaffected.
+    starts_at: "2026-06-15T06:00:00Z"
+    ends_at: "2026-06-15T08:00:00Z"
+
+  - id: 2026-05-30-platform-upgrade
+    message: >-
+      Completed: platform upgrade to Spark 4.0.1 and Delta 4.0.0. Notebook
+      images were rebuilt; custom pip installs in home directories needed
+      reinstalling.
+    starts_at: "2026-05-30T16:00:00Z"
+    ends_at: "2026-05-31T02:00:00Z"

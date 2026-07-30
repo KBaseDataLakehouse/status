@@ -34,7 +34,7 @@ layout: default
 {% if starts and now < starts %}{% assign state = 'Scheduled' %}{% endif %}
 {% if ends and now >= ends %}{% assign state = 'Resolved' %}{% endif %}
 <li class="incident{% if state == 'Resolved' %} incident--resolved{% endif %}" data-starts-at="{{ a.starts_at }}" data-ends-at="{{ a.ends_at }}">
-<span class="pill pill--{{ state | downcase }}">{{ state }}</span>
+<span class="chip chip--{{ state | downcase }}">{{ state }}</span>
 <p class="message">{{ a.message }}</p>
 <p class="window">{% if starts and ends %}{{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }} &ndash; {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif ends %}Until {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif starts %}From {{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }}{% else %}No end time set{% endif %}</p>
 </li>
@@ -71,10 +71,10 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
       active++;
     }
     el.classList.toggle('incident--resolved', state === 'Resolved');
-    var pill = el.querySelector('.pill');
+    var pill = el.querySelector(".chip");
     if (pill) {
       pill.textContent = state;
-      pill.className = 'pill pill--' + state.toLowerCase();
+      pill.className = "chip chip--" + state.toLowerCase();
     }
   });
 
