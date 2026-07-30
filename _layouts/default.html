@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ site.title }}</title>
+<meta name="description" content="{{ site.description }}">
+<style>
+:root {
+  --bg: #ffffff;
+  --fg: #1b1f24;
+  --muted: #656d76;
+  --rule: #d8dee4;
+  --ok: #1a7f37;
+  --ok-bg: #dafbe1;
+  --active: #9a6700;
+  --active-bg: #fff8c5;
+  --scheduled: #0969da;
+  --scheduled-bg: #ddf4ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #8d96a0;
+    --rule: #30363d;
+    --ok: #3fb950;
+    --ok-bg: #0f2f1a;
+    --active: #d29922;
+    --active-bg: #2e2405;
+    --scheduled: #58a6ff;
+    --scheduled-bg: #0c2d6b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+main { max-width: 44rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1.5rem; }
+.banner {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+  padding: 1rem 1.125rem;
+  border-radius: .5rem;
+  font-weight: 600;
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.banner--active { background: var(--active-bg); color: var(--active); }
+.dot {
+  width: .625rem;
+  height: .625rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.incidents { list-style: none; margin: 2rem 0 0; padding: 0; }
+.incident { border-top: 1px solid var(--rule); padding: 1.25rem 0; }
+.incident--resolved { color: var(--muted); }
+.pill {
+  display: inline-block;
+  padding: .0625rem .5rem;
+  border-radius: 1rem;
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  background: var(--active-bg);
+  color: var(--active);
+}
+.pill--scheduled { background: var(--scheduled-bg); color: var(--scheduled); }
+.pill--resolved { background: transparent; color: var(--muted); border: 1px solid var(--rule); }
+.message { margin: .625rem 0 .25rem; }
+.window, .footer { color: var(--muted); font-size: .8125rem; }
+.footer { margin-top: 2.5rem; border-top: 1px solid var(--rule); padding-top: 1rem; }
+a { color: var(--scheduled); }
+</style>
+</head>
+<body>
+<main>
+<h1>{{ site.title }}</h1>
+{{ content }}
+</main>
+</body>
+</html>

@@ -76,9 +76,14 @@ Two consequences worth knowing:
 | Path | Role |
 |---|---|
 | `_data/status.yml` | The only file you edit. Single source for both outputs. |
-| `index.md` | Renders the history as a page. |
+| `index.html` | Renders the history as a page. |
+| `_layouts/default.html` | Page shell and styles. No theme, no external assets. |
 | `status.json` | Renders the same data as JSON for machines. |
-| `_config.yml` | Jekyll theme and site title. |
+| `_config.yml` | Site title and description. |
+
+State labels and the banner are computed twice: at build time so the page is
+correct without JavaScript, and again in the browser so they are correct at
+view time rather than frozen at the last commit.
 
 Built by GitHub Pages' own Jekyll — no Actions, no build step, nothing to break
 between editing and publishing.

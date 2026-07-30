@@ -3,7 +3,7 @@
 # Editing this file is the whole publishing workflow. On commit, GitHub Pages
 # rebuilds and updates two things from it:
 #
-#   index.md     the human-readable page at the site root
+#   index.html   the human-readable page at the site root
 #   status.json  the machine-readable feed KBase Lakehouse JupyterLab polls
 #
 # This is a full history, newest first. Nothing needs deleting when an

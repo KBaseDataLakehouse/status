@@ -1,0 +1,90 @@
+---
+layout: default
+---
+{% assign entries = site.data.status.announcements %}
+{% assign now = site.time | date: '%s' | plus: 0 %}
+
+{% comment %}
+  States are computed twice: here at build time so the page is correct without
+  JavaScript, and again in the browser so the labels are correct at view time
+  rather than frozen at whenever the last commit happened.
+{% endcomment %}
+
+{% assign active_count = 0 %}
+{% for a in entries %}
+  {% assign starts = nil %}{% if a.starts_at and a.starts_at != '' %}{% assign starts = a.starts_at | date: '%s' | plus: 0 %}{% endif %}
+  {% assign ends = nil %}{% if a.ends_at and a.ends_at != '' %}{% assign ends = a.ends_at | date: '%s' | plus: 0 %}{% endif %}
+  {% assign is_active = true %}
+  {% if starts and now < starts %}{% assign is_active = false %}{% endif %}
+  {% if ends and now >= ends %}{% assign is_active = false %}{% endif %}
+  {% if is_active %}{% assign active_count = active_count | plus: 1 %}{% endif %}
+{% endfor %}
+
+<div id="banner" class="banner{% if active_count > 0 %} banner--active{% endif %}">
+<span class="dot"></span>
+<span id="banner-text">{% if active_count == 0 %}All systems operational{% elsif active_count == 1 %}1 active announcement{% else %}{{ active_count }} active announcements{% endif %}</span>
+</div>
+
+{% if entries and entries.size > 0 %}
+<ul class="incidents">
+{% for a in entries %}
+{% assign starts = nil %}{% if a.starts_at and a.starts_at != '' %}{% assign starts = a.starts_at | date: '%s' | plus: 0 %}{% endif %}
+{% assign ends = nil %}{% if a.ends_at and a.ends_at != '' %}{% assign ends = a.ends_at | date: '%s' | plus: 0 %}{% endif %}
+{% assign state = 'Current' %}
+{% if starts and now < starts %}{% assign state = 'Scheduled' %}{% endif %}
+{% if ends and now >= ends %}{% assign state = 'Resolved' %}{% endif %}
+<li class="incident{% if state == 'Resolved' %} incident--resolved{% endif %}" data-starts-at="{{ a.starts_at }}" data-ends-at="{{ a.ends_at }}">
+<span class="pill pill--{{ state | downcase }}">{{ state }}</span>
+<p class="message">{{ a.message }}</p>
+<p class="window">{% if starts and ends %}{{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }} &ndash; {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif ends %}Until {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif starts %}From {{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }}{% else %}No end time set{% endif %}</p>
+</li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<p class="footer">
+<a href="status.json">status.json</a> &middot;
+KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
+</p>
+
+<script>
+// Recompute states against the reader's clock. Liquid can only evaluate them
+// when the page is built, which goes stale as the build ages.
+(function () {
+  var incidents = document.querySelectorAll('.incident');
+  var now = Date.now();
+  var active = 0;
+
+  incidents.forEach(function (el) {
+    var starts = Date.parse(el.dataset.startsAt || '');
+    var ends = Date.parse(el.dataset.endsAt || '');
+    // An absent or unparseable bound is unbounded on that side, matching how
+    // consumers of status.json treat it: fail toward visible.
+    var state = 'Current';
+    if (!isNaN(starts) && now < starts) {
+      state = 'Scheduled';
+    }
+    if (!isNaN(ends) && now >= ends) {
+      state = 'Resolved';
+    }
+    if (state === 'Current') {
+      active++;
+    }
+    el.classList.toggle('incident--resolved', state === 'Resolved');
+    var pill = el.querySelector('.pill');
+    if (pill) {
+      pill.textContent = state;
+      pill.className = 'pill pill--' + state.toLowerCase();
+    }
+  });
+
+  var banner = document.getElementById('banner');
+  var text = document.getElementById('banner-text');
+  if (banner && text) {
+    banner.classList.toggle('banner--active', active > 0);
+    text.textContent = active === 0
+      ? 'All systems operational'
+      : active + ' active announcement' + (active === 1 ? '' : 's');
+  }
+})();
+</script>
