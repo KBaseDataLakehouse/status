@@ -1,2 +1,7 @@
 title: "KBase Lakehouse Status"
 description: "Platform status and maintenance announcements for the KBase Lakehouse."
+
+# Live per-service status, probed inside the cluster by JupyterHub and read
+# from the browser. Blank disables the service list entirely; the page still
+# renders announcements, which are static and survive a full outage.
+status_endpoint: "https://hub.berdl.kbase.us/hub/status"

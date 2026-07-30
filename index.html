@@ -42,6 +42,14 @@ layout: default
 </ul>
 {% endif %}
 
+{% if site.status_endpoint and site.status_endpoint != '' %}
+<section id="services" hidden>
+<h2 class="services__title">Services</h2>
+<ul id="services-list" class="services"></ul>
+<p id="services-checked" class="window"></p>
+</section>
+{% endif %}
+
 <p class="footer">
 <a href="status.json">status.json</a> &middot;
 KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
@@ -87,4 +95,58 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
       : active + ' active announcement' + (active === 1 ? '' : 's');
   }
 })();
+{% if site.status_endpoint and site.status_endpoint != '' %}
+
+// Live per-service state, probed inside the cluster by JupyterHub. This is the
+// only part of the page that depends on the platform being up, so it is kept
+// strictly additive: if the fetch fails, the section stays hidden and the
+// announcements above -- which are static and survive a full outage -- are
+// still the page's answer.
+(function () {
+  var section = document.getElementById('services');
+  var list = document.getElementById('services-list');
+  var checked = document.getElementById('services-checked');
+  if (!section || !list) {
+    return;
+  }
+
+  fetch({{ site.status_endpoint | jsonify }}, { cache: 'no-store' })
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status);
+      }
+      return response.json();
+    })
+    .then(function (data) {
+      var services = (data && data.services) || [];
+      if (!services.length) {
+        return;
+      }
+      services.forEach(function (service) {
+        var li = document.createElement('li');
+        li.className = 'service';
+        var name = document.createElement('span');
+        name.textContent = service.name;
+        var chip = document.createElement('span');
+        // Anything unrecognized is shown verbatim in the neutral style rather
+        // than being silently coerced into "ok".
+        var known = { ok: 'Operational', degraded: 'Degraded', down: 'Down' };
+        chip.className = 'chip chip--service-' + (known[service.state] ? service.state : 'unknown');
+        chip.textContent = known[service.state] || service.state;
+        li.appendChild(name);
+        li.appendChild(chip);
+        list.appendChild(li);
+      });
+      if (checked && data.checked_at) {
+        checked.textContent = 'Checked ' + new Date(data.checked_at).toUTCString();
+      }
+      section.hidden = false;
+    })
+    .catch(function () {
+      // Unreachable is expected when the platform is down -- exactly when this
+      // page matters most. Say nothing rather than claim anything.
+      section.hidden = true;
+    });
+})();
+{% endif %}
 </script>
