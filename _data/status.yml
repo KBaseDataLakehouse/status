@@ -34,11 +34,18 @@
 #              until you give it an end time. Exclusive: at ends_at exactly,
 #              the announcement is over.
 
-announcements: []
+announcements:
+  # Mock entry for verifying the page and the JupyterLab popup end to end.
+  # It expires on its own — no cleanup commit needed.
+  - id: 2026-07-30-render-check
+    message: >-
+      Test announcement — verifying status page rendering and the JupyterLab
+      popup. No action needed; this expires automatically.
+    starts_at: "2026-07-30T20:34:42Z"
+    ends_at: "2026-07-30T21:34:42Z"
 
 # Copy this shape when adding one, newest at the top of the list:
 #
-# announcements:
 #   - id: 2026-08-02-spark-restart
 #     message: >-
 #       Spark clusters restart Saturday 09:00–13:00 PT. Save your work;
