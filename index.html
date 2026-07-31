@@ -5,20 +5,25 @@ layout: default
 {% assign now = site.time | date: '%s' | plus: 0 %}
 
 {% comment %}
-  States are computed twice: here at build time so the page is correct without
-  JavaScript, and again in the browser so the labels are correct at view time
-  rather than frozen at whenever the last commit happened.
+  States are computed here at build time so the page works without JavaScript,
+  and again in the browser so labels track the reader's clock rather than the
+  last commit. The capture defers the list until active_count is known.
 {% endcomment %}
 
 {% assign active_count = 0 %}
-{% for a in entries %}
-  {% assign starts = nil %}{% if a.starts_at and a.starts_at != '' %}{% assign starts = a.starts_at | date: '%s' | plus: 0 %}{% endif %}
-  {% assign ends = nil %}{% if a.ends_at and a.ends_at != '' %}{% assign ends = a.ends_at | date: '%s' | plus: 0 %}{% endif %}
-  {% assign is_active = true %}
-  {% if starts and now < starts %}{% assign is_active = false %}{% endif %}
-  {% if ends and now >= ends %}{% assign is_active = false %}{% endif %}
-  {% if is_active %}{% assign active_count = active_count | plus: 1 %}{% endif %}
-{% endfor %}
+{% capture incident_items %}{% for a in entries %}
+{% assign starts = nil %}{% if a.starts_at and a.starts_at != '' %}{% assign starts = a.starts_at | date: '%s' | plus: 0 %}{% endif %}
+{% assign ends = nil %}{% if a.ends_at and a.ends_at != '' %}{% assign ends = a.ends_at | date: '%s' | plus: 0 %}{% endif %}
+{% assign state = 'Current' %}
+{% if starts and now < starts %}{% assign state = 'Scheduled' %}{% endif %}
+{% if ends and now >= ends %}{% assign state = 'Resolved' %}{% endif %}
+{% if state == 'Current' %}{% assign active_count = active_count | plus: 1 %}{% endif %}
+<li class="incident{% if state == 'Resolved' %} incident--resolved{% endif %}" data-starts-at="{{ a.starts_at }}" data-ends-at="{{ a.ends_at }}">
+<span class="chip chip--{{ state | downcase }}">{{ state }}</span>
+<p class="message">{{ a.message }}</p>
+<p class="window">{% if starts and ends %}{{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }} &ndash; {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif ends %}Until {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif starts %}From {{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }}{% else %}No end time set{% endif %}</p>
+</li>
+{% endfor %}{% endcapture %}
 
 <div id="banner" class="banner{% if active_count > 0 %} banner--active{% endif %}">
 <span class="dot"></span>
@@ -26,31 +31,15 @@ layout: default
 </div>
 
 {% if entries and entries.size > 0 %}
-<ul class="incidents">
-{% for a in entries %}
-{% assign starts = nil %}{% if a.starts_at and a.starts_at != '' %}{% assign starts = a.starts_at | date: '%s' | plus: 0 %}{% endif %}
-{% assign ends = nil %}{% if a.ends_at and a.ends_at != '' %}{% assign ends = a.ends_at | date: '%s' | plus: 0 %}{% endif %}
-{% assign state = 'Current' %}
-{% if starts and now < starts %}{% assign state = 'Scheduled' %}{% endif %}
-{% if ends and now >= ends %}{% assign state = 'Resolved' %}{% endif %}
-<li class="incident{% if state == 'Resolved' %} incident--resolved{% endif %}" data-starts-at="{{ a.starts_at }}" data-ends-at="{{ a.ends_at }}">
-<span class="chip chip--{{ state | downcase }}">{{ state }}</span>
-<p class="message">{{ a.message }}</p>
-<p class="window">{% if starts and ends %}{{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }} &ndash; {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif ends %}Until {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif starts %}From {{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }}{% else %}No end time set{% endif %}</p>
-</li>
-{% endfor %}
-</ul>
+<ul class="incidents">{{ incident_items }}</ul>
 {% endif %}
 
-{% if site.status_endpoint and site.status_endpoint != '' %}
-<section id="services">
+{% assign services_url = site.data.status.services_url %}
+{% if services_url and services_url != '' %}
+<section id="services" hidden>
 <h2 class="services__title">Services</h2>
-<ul id="services-list" class="services">
-{% for service in site.services %}
-<li class="service" data-name="{{ service }}"><span>{{ service }}</span><span class="chip chip--service-unknown">Unknown</span></li>
-{% endfor %}
-</ul>
-<p id="services-checked" class="window">Checking&hellip;</p>
+<ul id="services-list" class="services"></ul>
+<p id="services-checked" class="window"></p>
 </section>
 {% endif %}
 
@@ -60,17 +49,16 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
 </p>
 
 <script>
-// Recompute states against the reader's clock. Liquid can only evaluate them
-// when the page is built, which goes stale as the build ages.
+// Recompute against the reader's clock; the Liquid values go stale as the
+// build ages.
 (function () {
-  var incidents = document.querySelectorAll('.incident');
   var now = Date.now();
   var active = 0;
 
-  incidents.forEach(function (el) {
+  document.querySelectorAll('.incident').forEach(function (el) {
     var starts = Date.parse(el.dataset.startsAt || '');
     var ends = Date.parse(el.dataset.endsAt || '');
-    // An absent or unparseable bound is unbounded on that side, matching how
+    // Absent or unparseable bound = unbounded on that side, matching how
     // consumers of status.json treat it: fail toward visible.
     var state = 'Current';
     if (!isNaN(starts) && now < starts) {
@@ -83,10 +71,10 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
       active++;
     }
     el.classList.toggle('incident--resolved', state === 'Resolved');
-    var pill = el.querySelector(".chip");
-    if (pill) {
-      pill.textContent = state;
-      pill.className = "chip chip--" + state.toLowerCase();
+    var chip = el.querySelector('.chip');
+    if (chip) {
+      chip.textContent = state;
+      chip.className = 'chip chip--' + state.toLowerCase();
     }
   });
 
@@ -99,55 +87,62 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
       : active + ' active announcement' + (active === 1 ? '' : 's');
   }
 })();
-{% if site.status_endpoint and site.status_endpoint != '' %}
+{% if services_url and services_url != '' %}
 
-// Live per-service state, probed inside the cluster by JupyterHub.
-//
-// The rows are already on the page as "Unknown"; this fills them in. If the
-// endpoint cannot be reached, JupyterHub is marked down -- it serves the
-// endpoint, so an unreachable endpoint means an unreachable Hub -- and the
-// rest stay unknown, because with the prober down nothing can be said about
-// them. Going blank here would fail at the one job this page has.
+// Service rows come from the endpoint itself -- there is no second list to keep
+// in sync. Names from the last good response are remembered locally, so when
+// the endpoint is unreachable the rows still appear: JupyterHub Down (it serves
+// the endpoint, so unreachable means unreachable Hub) and the rest Unknown,
+// since with the prober down nothing can be said about them.
 (function () {
   var LABELS = { ok: 'Operational', degraded: 'Degraded', down: 'Down' };
+  var HUB = 'JupyterHub';
+  var REMEMBERED = 'berdl-status-services';
+  var section = document.getElementById('services');
   var list = document.getElementById('services-list');
   var checked = document.getElementById('services-checked');
-  if (!list) {
+  if (!section || !list) {
     return;
   }
 
-  function setState(row, state) {
-    var chip = row.querySelector('.chip');
-    if (!chip) {
-      return;
+  function remember(names) {
+    try {
+      window.localStorage.setItem(REMEMBERED, JSON.stringify(names));
+    } catch (e) {
+      /* unavailable; the list just won't survive a failed first load */
     }
-    // An unrecognized state is shown verbatim in the neutral style rather than
-    // being coerced into "Operational".
-    chip.className = 'chip chip--service-' + (LABELS[state] ? state : 'unknown');
-    chip.textContent = LABELS[state] || state;
   }
 
-  function rowFor(name) {
-    var existing = list.querySelector('[data-name="' + CSS.escape(name) + '"]');
-    if (existing) {
-      return existing;
+  function recall() {
+    try {
+      var parsed = JSON.parse(window.localStorage.getItem(REMEMBERED) || '[]');
+      return Array.isArray(parsed) ? parsed.filter(function (n) { return typeof n === 'string'; }) : [];
+    } catch (e) {
+      return [];
     }
-    // Reported but not in the configured list: append rather than drop it, so
-    // the list drifting out of date degrades instead of hiding a service.
+  }
+
+  function addRow(name, state) {
     var li = document.createElement('li');
     li.className = 'service';
-    li.setAttribute('data-name', name);
     var label = document.createElement('span');
     label.textContent = name;
     var chip = document.createElement('span');
-    chip.className = 'chip chip--service-unknown';
+    // Unrecognized state shows verbatim in the neutral style rather than being
+    // coerced into "Operational".
+    chip.className = 'chip chip--service-' + (LABELS[state] ? state : 'unknown');
+    chip.textContent = LABELS[state] || state;
     li.appendChild(label);
     li.appendChild(chip);
     list.appendChild(li);
-    return li;
   }
 
-  fetch({{ site.status_endpoint | jsonify }}, { cache: 'no-store' })
+  function show(note) {
+    checked.textContent = note;
+    section.hidden = false;
+  }
+
+  fetch({{ services_url | jsonify }}, { cache: 'no-store' })
     .then(function (response) {
       if (!response.ok) {
         throw new Error('HTTP ' + response.status);
@@ -159,30 +154,25 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
       if (!services.length) {
         throw new Error('empty response');
       }
-      var reported = {};
-      services.forEach(function (service) {
-        reported[service.name] = true;
-        setState(rowFor(service.name), service.state);
+      services.forEach(function (s) {
+        addRow(s.name, s.state);
       });
-      // Anything configured here but absent from the response stays unknown --
-      // the prober did not speak to it, so neither will we.
-      if (checked) {
-        checked.textContent = data.checked_at
-          ? 'Checked ' + new Date(data.checked_at).toUTCString()
-          : '';
-      }
+      remember(services.map(function (s) { return s.name; }));
+      show(data.checked_at ? 'Checked ' + new Date(data.checked_at).toUTCString() : '');
     })
     .catch(function () {
-      var hub = list.querySelector('[data-name="JupyterHub"]');
-      if (hub) {
-        setState(hub, 'down');
+      var names = recall();
+      // Always name the Hub, even on a first visit with nothing remembered:
+      // the failed fetch is direct evidence about it.
+      if (names.indexOf(HUB) === -1) {
+        names.unshift(HUB);
       }
-      if (checked) {
-        // Deliberately hedged: from here, "the platform is unreachable" and
-        // "you cannot reach the platform" look identical.
-        checked.textContent =
-          'Could not reach the platform. It may be down, or your network may be blocking it.';
-      }
+      names.forEach(function (name) {
+        addRow(name, name === HUB ? 'down' : 'unknown');
+      });
+      // Hedged: from here, "the platform is unreachable" and "you cannot reach
+      // the platform" look identical.
+      show('Could not reach the platform. It may be down, or your network may be blocking it.');
     });
 })();
 {% endif %}

@@ -1,29 +1,2 @@
 title: "KBase Lakehouse Status"
 description: "Platform status and maintenance announcements for the KBase Lakehouse."
-
-# Live per-service status, probed inside the cluster by JupyterHub and read
-# from the browser. Blank disables the service list entirely; the page still
-# renders announcements, which are static and survive a full outage.
-status_endpoint: "https://hub.berdl.kbase.us/hub/status"
-
-# Services expected to appear in that response.
-#
-# The page renders this list up front, so it has something to show before the
-# fetch lands, without JavaScript, and — most importantly — when the endpoint
-# cannot be reached at all. In that last case JupyterHub is marked down (it
-# serves the endpoint, so an unreachable endpoint means an unreachable Hub)
-# and the rest are left unknown, because with the prober down nothing can be
-# said about them either way.
-#
-# Names must match the endpoint's; anything it returns that is missing here is
-# appended, so this drifting out of date degrades rather than breaks.
-services:
-  - JupyterHub
-  - Governance API
-  - Spark Clusters
-  - Query Service
-  - Tenant Access
-  - Task Service
-  - Object Storage
-  - Iceberg Catalog
-  - SQL Engine

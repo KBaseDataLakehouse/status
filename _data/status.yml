@@ -1,42 +1,30 @@
-# KBase Lakehouse platform announcements — the single source of truth for this site.
+# KBase Lakehouse announcements — the only file you edit. On commit, GitHub
+# Pages rebuilds index.html (human page) and status.json (feed JupyterLab polls).
 #
-# Editing this file is the whole publishing workflow. On commit, GitHub Pages
-# rebuilds and updates two things from it:
+# Full history, newest first. Nothing needs deleting: set `ends_at` and an entry
+# stops showing in JupyterLab while staying on the page as a record.
 #
-#   index.html   the human-readable page at the site root
-#   status.json  the machine-readable feed KBase Lakehouse JupyterLab polls
+# QUOTE YOUR TIMESTAMPS. Unquoted, YAML parses them as dates and re-serializes
+# into status.json without the T/Z, which consumers cannot read:
 #
-# This is a full history, newest first. Nothing needs deleting when an
-# announcement is over — set `ends_at` and it stops being shown in JupyterLab
-# while remaining on the page as a record.
+#   ends_at: 2026-08-02T13:00:00Z     # WRONG
+#   ends_at: "2026-08-02T13:00:00Z"   # RIGHT
 #
-# ---------------------------------------------------------------------------
-# QUOTE YOUR TIMESTAMPS.
-#
-# Unquoted YAML timestamps are parsed as date objects and re-serialized into
-# status.json in a non-ISO form (no "T", no "Z") that consumers cannot read:
-#
-#   ends_at: 2026-08-02T13:00:00Z     # WRONG -> re-serialized as a date
-#   ends_at: "2026-08-02T13:00:00Z"   # RIGHT -> "2026-08-02T13:00:00Z"
-#
-# ---------------------------------------------------------------------------
 # Fields:
-#
-#   id         required. Stable, unique, never reused. Dismissal in JupyterLab
-#              is remembered per id, so editing an entry's text without
-#              changing its id will NOT re-notify anyone who already dismissed
-#              it. To re-notify, use a new id.
-#   message    required. Plain text, shown verbatim in the popup.
-#   starts_at  optional, quoted ISO 8601. Absent means "already started", so an
-#              announcement can be committed ahead of time and appear on its
-#              own schedule.
-#   ends_at    optional, quoted ISO 8601. Absent means "no expiry" — it shows
-#              until you give it an end time. Exclusive: at ends_at exactly,
-#              the announcement is over.
+#   id         required. Stable, never reused — dismissal is remembered per id,
+#              so editing text without changing the id will not re-notify.
+#   message    required. Plain text, shown verbatim.
+#   starts_at  optional, quoted ISO 8601. Absent = already started.
+#   ends_at    optional, quoted ISO 8601. Absent = no expiry. Exclusive.
+
+# Live per-service state, probed in-cluster by JupyterHub. Published here so
+# status.json is self-describing: a consumer reads one document and learns
+# where the rest lives. Blank drops the service list from the page.
+services_url: "https://hub.berdl.kbase.us/hub/status"
 
 announcements: []
 
-# Copy this shape when adding one, newest at the top of the list:
+# Copy this shape, newest at the top:
 #
 # announcements:
 #   - id: 2026-08-02-spark-restart
