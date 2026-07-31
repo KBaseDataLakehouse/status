@@ -80,7 +80,16 @@ h1 { font-size: var(--fs-hero); line-height: 1.25; text-wrap: balance; margin-bo
 .banner__note { font-size: var(--fs-4); font-weight: 400; color: var(--c-ink4); }
 .dot { width: 10px; height: 10px; border-radius: 999px; background: currentColor; flex: none; }
 
-.incidents { list-style: none; margin-top: var(--s-9); display: flex; flex-direction: column; gap: var(--s-5); }
+.incidents { list-style: none; margin-top: var(--s-5); display: flex; flex-direction: column; gap: var(--s-5); }
+#incidents-open { margin-top: var(--s-9); }
+.resolved { margin-top: var(--s-7); }
+.resolved > summary {
+  cursor: pointer;
+  color: var(--c-ink4);
+  font-size: var(--fs-4);
+  padding: var(--s-2) 0;
+}
+.resolved > summary:hover { color: var(--c-ink2); }
 .incident {
   background: var(--c-surface);
   border: 1px solid var(--c-border);

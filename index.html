@@ -8,23 +8,29 @@ layout: default
 {% comment %}
   States are computed here at build time so the page works without JavaScript,
   and again in the browser so labels track the reader's clock rather than the
-  last commit. The capture defers the list until active_count is known.
+  last commit. Resolved entries are split out here rather than in script, so
+  the collapse also holds without JavaScript.
 {% endcomment %}
 
 {% assign active_count = 0 %}
-{% capture incident_items %}{% for a in entries %}
+{% assign resolved_count = 0 %}
+{% capture open_items %}{% endcapture %}
+{% capture resolved_items %}{% endcapture %}
+{% for a in entries %}
 {% assign starts = nil %}{% if a.starts_at and a.starts_at != '' %}{% assign starts = a.starts_at | date: '%s' | plus: 0 %}{% endif %}
 {% assign ends = nil %}{% if a.ends_at and a.ends_at != '' %}{% assign ends = a.ends_at | date: '%s' | plus: 0 %}{% endif %}
 {% assign state = 'Current' %}
 {% if starts and now < starts %}{% assign state = 'Scheduled' %}{% endif %}
 {% if ends and now >= ends %}{% assign state = 'Resolved' %}{% endif %}
-{% if state == 'Current' %}{% assign active_count = active_count | plus: 1 %}{% endif %}
-<li class="incident{% if state == 'Resolved' %} incident--resolved{% endif %}" data-starts-at="{{ a.starts_at }}" data-ends-at="{{ a.ends_at }}">
+{% capture item %}<li class="incident{% if state == 'Resolved' %} incident--resolved{% endif %}" data-starts-at="{{ a.starts_at }}" data-ends-at="{{ a.ends_at }}">
 <span class="chip chip--{{ state | downcase }}">{{ state }}</span>
 <p class="message">{{ a.message }}</p>
 <p class="window">{% if starts and ends %}{{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }} &ndash; {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif ends %}Until {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif starts %}From {{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }}{% else %}No end time set{% endif %}</p>
-</li>
-{% endfor %}{% endcapture %}
+</li>{% endcapture %}
+{% if state == 'Resolved' %}{% assign resolved_count = resolved_count | plus: 1 %}{% capture resolved_items %}{{ resolved_items }}{{ item }}{% endcapture %}
+{% else %}{% if state == 'Current' %}{% assign active_count = active_count | plus: 1 %}{% endif %}{% capture open_items %}{{ open_items }}{{ item }}{% endcapture %}
+{% endif %}
+{% endfor %}
 
 {% comment %}
   Health is unknown until the probe answers, so the served banner claims
@@ -39,9 +45,12 @@ layout: default
 </span>
 </div>
 
-{% if entries and entries.size > 0 %}
-<ul class="incidents">{{ incident_items }}</ul>
-{% endif %}
+<ul id="incidents-open" class="incidents"{% if open_items == '' %} hidden{% endif %}>{{ open_items }}</ul>
+
+<details id="resolved" class="resolved"{% if resolved_count == 0 %} hidden{% endif %}>
+<summary id="resolved-summary">{{ resolved_count }} resolved</summary>
+<ul id="incidents-resolved" class="incidents">{{ resolved_items }}</ul>
+</details>
 
 {% if services_url and services_url != '' %}
 <section id="services" hidden>
@@ -111,7 +120,6 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
     bannerText.textContent = message;
 
     if (bannerNote) {
-      // Suppressed when it would just restate the banner.
       var show = announcements > 0 && SERVICES_EXPECTED;
       bannerNote.textContent = show ? plural(announcements, 'active announcement') : '';
       bannerNote.hidden = !show;
@@ -119,9 +127,15 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
   }
 
   // Recompute announcement states against the reader's clock; the Liquid values
-  // go stale as the build ages.
+  // go stale as the build ages. An entry whose window has since opened or
+  // closed moves between the two lists.
   (function () {
+    var openList = document.getElementById('incidents-open');
+    var resolvedList = document.getElementById('incidents-resolved');
+    var details = document.getElementById('resolved');
+    var summary = document.getElementById('resolved-summary');
     var now = Date.now();
+
     document.querySelectorAll('.incident').forEach(function (el) {
       var starts = Date.parse(el.dataset.startsAt || '');
       var ends = Date.parse(el.dataset.endsAt || '');
@@ -137,13 +151,29 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
       if (state === 'Current') {
         announcements++;
       }
-      el.classList.toggle('incident--resolved', state === 'Resolved');
+
+      var resolved = state === 'Resolved';
+      el.classList.toggle('incident--resolved', resolved);
       var chip = el.querySelector('.chip');
       if (chip) {
         chip.textContent = state;
         chip.className = 'chip chip--' + state.toLowerCase();
       }
+
+      var target = resolved ? resolvedList : openList;
+      if (target && el.parentNode !== target) {
+        target.appendChild(el);
+      }
     });
+
+    if (openList) {
+      openList.hidden = !openList.children.length;
+    }
+    if (details && resolvedList && summary) {
+      var count = resolvedList.children.length;
+      details.hidden = count === 0;
+      summary.textContent = count + ' resolved';
+    }
     renderBanner();
   })();
 {% if services_url and services_url != '' %}
