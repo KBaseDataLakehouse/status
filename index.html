@@ -4,28 +4,27 @@ layout: default
 {% assign entries = site.data.status.announcements %}
 {% assign services_url = site.data.status.services_url %}
 {% assign now = site.time | date: '%s' | plus: 0 %}
+{% assign fmt = '%d %b %Y, %H:%M UTC' %}
 
 {% comment %}
-  States are computed here at build time so the page works without JavaScript,
-  and again in the browser so labels track the reader's clock rather than the
-  last commit. Resolved entries are split out here rather than in script, so
-  the collapse also holds without JavaScript.
+  Resolved entries are split out here, not in script, so the collapse holds
+  without JavaScript. A bound of 0 means absent or unparseable: unbounded on
+  that side, so the entry stays visible.
 {% endcomment %}
-
 {% assign active_count = 0 %}
 {% assign resolved_count = 0 %}
 {% capture open_items %}{% endcapture %}
 {% capture resolved_items %}{% endcapture %}
 {% for a in entries %}
-{% assign starts = nil %}{% if a.starts_at and a.starts_at != '' %}{% assign starts = a.starts_at | date: '%s' | plus: 0 %}{% endif %}
-{% assign ends = nil %}{% if a.ends_at and a.ends_at != '' %}{% assign ends = a.ends_at | date: '%s' | plus: 0 %}{% endif %}
+{% assign starts = a.starts_at | date: '%s' | plus: 0 %}
+{% assign ends = a.ends_at | date: '%s' | plus: 0 %}
 {% assign state = 'Current' %}
-{% if starts and now < starts %}{% assign state = 'Scheduled' %}{% endif %}
-{% if ends and now >= ends %}{% assign state = 'Resolved' %}{% endif %}
+{% if starts > 0 and now < starts %}{% assign state = 'Scheduled' %}{% endif %}
+{% if ends > 0 and now >= ends %}{% assign state = 'Resolved' %}{% endif %}
 {% capture item %}<li class="incident{% if state == 'Resolved' %} incident--resolved{% endif %}" data-starts-at="{{ a.starts_at }}" data-ends-at="{{ a.ends_at }}">
 <span class="chip chip--{{ state | downcase }}">{{ state }}</span>
 <p class="message">{{ a.message }}</p>
-<p class="window">{% if starts and ends %}{{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }} &ndash; {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif ends %}Until {{ a.ends_at | date: '%d %b %Y, %H:%M UTC' }}{% elsif starts %}From {{ a.starts_at | date: '%d %b %Y, %H:%M UTC' }}{% else %}No end time set{% endif %}</p>
+<p class="window">{% if starts > 0 and ends > 0 %}{{ a.starts_at | date: fmt }} &ndash; {{ a.ends_at | date: fmt }}{% elsif ends > 0 %}Until {{ a.ends_at | date: fmt }}{% elsif starts > 0 %}From {{ a.starts_at | date: fmt }}{% else %}No end time set{% endif %}</p>
 </li>{% endcapture %}
 {% if state == 'Resolved' %}{% assign resolved_count = resolved_count | plus: 1 %}{% capture resolved_items %}{{ resolved_items }}{{ item }}{% endcapture %}
 {% else %}{% if state == 'Current' %}{% assign active_count = active_count | plus: 1 %}{% endif %}{% capture open_items %}{{ open_items }}{{ item }}{% endcapture %}
@@ -33,9 +32,9 @@ layout: default
 {% endfor %}
 
 {% comment %}
-  Health is unknown until the probe answers, so the served banner claims
-  nothing. With no probe configured it stays neutral permanently -- announcement
-  counts are not a health signal and must never colour this green.
+  Served neutral: health is unknown until the probe answers, and with no probe
+  configured it stays neutral forever. Announcement counts are not health and
+  must never colour this green.
 {% endcomment %}
 <div id="banner" class="banner banner--unknown">
 <span class="dot"></span>
@@ -67,15 +66,10 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
 
 <script>
 (function () {
-  // Two orthogonal axes, kept apart on purpose:
-  //
-  //   health     ok / degraded / down / unknown, from the probe -- owns the
-  //              banner and the green-yellow-red scale outright.
-  //   lifecycle  Current / Scheduled / Resolved, from an announcement's time
-  //              window. Context, not severity: a notice about Tuesday's
-  //              upgrade is not degradation and must not colour the banner.
-  //
-  // So announcements appear as a subordinate count, never as a level.
+  // Two axes, deliberately apart: health (ok/degraded/down/unknown, from the
+  // probe) owns the banner and the green-yellow-red scale outright. Announcement
+  // lifecycle is context, not severity -- a notice about Tuesday's upgrade is not
+  // degradation -- so it only ever appears as a subordinate count.
   var SERVICES_EXPECTED = {% if services_url and services_url != '' %}true{% else %}false{% endif %};
   var banner = document.getElementById('banner');
   var bannerText = document.getElementById('banner-text');
@@ -88,14 +82,10 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
   }
 
   function renderBanner() {
-    if (!banner || !bannerText) {
-      return;
-    }
     var level = 'unknown';
     var message;
 
     if (!SERVICES_EXPECTED) {
-      // No probe configured: no health signal exists, so claim none.
       message = announcements ? plural(announcements, 'active announcement') : 'No active announcements';
     } else if (!services) {
       message = 'Checking services…';
@@ -109,8 +99,7 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
       level = 'degraded';
       message = plural(services.degraded, 'service') + ' degraded';
     } else if (services.unknown) {
-      // Neutral, not a severity rung: unknown is absence of information.
-      message = 'Some services unknown';
+      message = 'Some services unknown'; // absence of information, not a rung
     } else {
       level = 'ok';
       message = 'All systems operational';
@@ -119,165 +108,129 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
     banner.className = 'banner banner--' + level;
     bannerText.textContent = message;
 
-    if (bannerNote) {
-      var show = announcements > 0 && SERVICES_EXPECTED;
-      bannerNote.textContent = show ? plural(announcements, 'active announcement') : '';
-      bannerNote.hidden = !show;
-    }
+    var note = SERVICES_EXPECTED && announcements > 0;
+    bannerNote.textContent = note ? plural(announcements, 'active announcement') : '';
+    bannerNote.hidden = !note;
   }
 
-  // Recompute announcement states against the reader's clock; the Liquid values
-  // go stale as the build ages. An entry whose window has since opened or
-  // closed moves between the two lists.
-  (function () {
-    var openList = document.getElementById('incidents-open');
-    var resolvedList = document.getElementById('incidents-resolved');
-    var details = document.getElementById('resolved');
-    var summary = document.getElementById('resolved-summary');
-    var now = Date.now();
+  // Recompute against the reader's clock -- the Liquid labels go stale as the
+  // build ages, and an entry whose window has since opened or closed moves
+  // between the two lists. Unparseable bound = unbounded: fail toward visible.
+  var openList = document.getElementById('incidents-open');
+  var resolvedList = document.getElementById('incidents-resolved');
+  var now = Date.now();
 
-    document.querySelectorAll('.incident').forEach(function (el) {
-      var starts = Date.parse(el.dataset.startsAt || '');
-      var ends = Date.parse(el.dataset.endsAt || '');
-      // Absent or unparseable bound = unbounded on that side, matching how
-      // consumers of status.json treat it: fail toward visible.
-      var state = 'Current';
-      if (!isNaN(starts) && now < starts) {
-        state = 'Scheduled';
-      }
-      if (!isNaN(ends) && now >= ends) {
-        state = 'Resolved';
-      }
-      if (state === 'Current') {
-        announcements++;
-      }
-
-      var resolved = state === 'Resolved';
-      el.classList.toggle('incident--resolved', resolved);
-      var chip = el.querySelector('.chip');
-      if (chip) {
-        chip.textContent = state;
-        chip.className = 'chip chip--' + state.toLowerCase();
-      }
-
-      var target = resolved ? resolvedList : openList;
-      if (target && el.parentNode !== target) {
-        target.appendChild(el);
-      }
-    });
-
-    if (openList) {
-      openList.hidden = !openList.children.length;
+  document.querySelectorAll('.incident').forEach(function (el) {
+    var starts = Date.parse(el.dataset.startsAt || '');
+    var ends = Date.parse(el.dataset.endsAt || '');
+    var state = 'Current';
+    if (!isNaN(starts) && now < starts) {
+      state = 'Scheduled';
     }
-    if (details && resolvedList && summary) {
-      var count = resolvedList.children.length;
-      details.hidden = count === 0;
-      summary.textContent = count + ' resolved';
+    if (!isNaN(ends) && now >= ends) {
+      state = 'Resolved';
     }
-    renderBanner();
-  })();
+    if (state === 'Current') {
+      announcements++;
+    }
+
+    var resolved = state === 'Resolved';
+    el.classList.toggle('incident--resolved', resolved);
+    var chip = el.querySelector('.chip');
+    chip.textContent = state;
+    chip.className = 'chip chip--' + state.toLowerCase();
+    // Re-appending every entry in document order preserves that order.
+    (resolved ? resolvedList : openList).appendChild(el);
+  });
+
+  openList.hidden = !openList.children.length;
+  document.getElementById('resolved').hidden = !resolvedList.children.length;
+  document.getElementById('resolved-summary').textContent = resolvedList.children.length + ' resolved';
+  renderBanner();
 {% if services_url and services_url != '' %}
 
-  // Service rows come from the endpoint itself -- there is no second list to
-  // keep in sync. Names from the last good response are remembered locally, so
-  // an unreachable endpoint still renders rows: JupyterHub Down (it serves the
-  // endpoint, so unreachable means unreachable Hub) and the rest Unknown, since
-  // with the prober down nothing can be said about them.
-  (function () {
-    var LABELS = { ok: 'Operational', degraded: 'Degraded', down: 'Down', unknown: 'Unknown' };
-    var HUB = 'JupyterHub';
-    var REMEMBERED = 'berdl-status-services';
-    var section = document.getElementById('services');
-    var list = document.getElementById('services-list');
-    var checked = document.getElementById('services-checked');
-    if (!section || !list) {
-      return;
-    }
+  // Rows come from the endpoint itself -- there is no second list to keep in
+  // sync. Names from the last good response are cached locally so an
+  // unreachable endpoint still renders rows: JupyterHub Down (it serves the
+  // endpoint) and the rest Unknown, since with the prober down nothing can be
+  // said about them.
+  var LABELS = { ok: 'Operational', degraded: 'Degraded', down: 'Down', unknown: 'Unknown' };
+  var HUB = 'JupyterHub';
+  var CACHE_KEY = 'berdl-status-services';
+  var list = document.getElementById('services-list');
 
-    function remember(names) {
-      try {
-        window.localStorage.setItem(REMEMBERED, JSON.stringify(names));
-      } catch (e) {
-        /* unavailable; the list just won't survive a failed first load */
+  function addRow(name, state) {
+    var li = document.createElement('li');
+    li.className = 'service';
+    var label = document.createElement('span');
+    label.textContent = name;
+    var chip = document.createElement('span');
+    // Unrecognized state shows verbatim in the neutral style rather than being
+    // coerced into "Operational".
+    chip.className = 'chip chip--service-' + (LABELS[state] ? state : 'unknown');
+    chip.textContent = LABELS[state] || state;
+    li.appendChild(label);
+    li.appendChild(chip);
+    list.appendChild(li);
+  }
+
+  function show(note) {
+    document.getElementById('services-checked').textContent = note;
+    document.getElementById('services').hidden = false;
+    renderBanner();
+  }
+
+  fetch({{ services_url | jsonify }}, { cache: 'no-store' })
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status);
       }
-    }
-
-    function recall() {
-      try {
-        var parsed = JSON.parse(window.localStorage.getItem(REMEMBERED) || '[]');
-        return Array.isArray(parsed)
-          ? parsed.filter(function (n) { return typeof n === 'string'; })
-          : [];
-      } catch (e) {
-        return [];
+      return response.json();
+    })
+    .then(function (data) {
+      var reported = (data && data.services) || [];
+      if (!reported.length) {
+        throw new Error('empty response');
       }
-    }
-
-    function addRow(name, state) {
-      var li = document.createElement('li');
-      li.className = 'service';
-      var label = document.createElement('span');
-      label.textContent = name;
-      var chip = document.createElement('span');
-      // Unrecognized state shows verbatim in the neutral style rather than
-      // being coerced into "Operational".
-      chip.className = 'chip chip--service-' + (LABELS[state] ? state : 'unknown');
-      chip.textContent = LABELS[state] || state;
-      li.appendChild(label);
-      li.appendChild(chip);
-      list.appendChild(li);
-    }
-
-    function show(note) {
-      checked.textContent = note;
-      section.hidden = false;
-      renderBanner();
-    }
-
-    fetch({{ services_url | jsonify }}, { cache: 'no-store' })
-      .then(function (response) {
-        if (!response.ok) {
-          throw new Error('HTTP ' + response.status);
+      var tally = { reachable: true, down: 0, degraded: 0, unknown: 0 };
+      reported.forEach(function (s) {
+        addRow(s.name, s.state);
+        // Anything not explicitly down/degraded/ok counts as unknown, not healthy.
+        if (s.state === 'down' || s.state === 'degraded') {
+          tally[s.state]++;
+        } else if (s.state !== 'ok') {
+          tally.unknown++;
         }
-        return response.json();
-      })
-      .then(function (data) {
-        var reported = (data && data.services) || [];
-        if (!reported.length) {
-          throw new Error('empty response');
-        }
-        var tally = { reachable: true, down: 0, degraded: 0, unknown: 0 };
-        reported.forEach(function (s) {
-          addRow(s.name, s.state);
-          // An unrecognized state counts as unknown, not as healthy.
-          if (s.state === 'down') {
-            tally.down++;
-          } else if (s.state === 'degraded') {
-            tally.degraded++;
-          } else if (s.state !== 'ok') {
-            tally.unknown++;
-          }
-        });
-        services = tally;
-        remember(reported.map(function (s) { return s.name; }));
-        show(data.checked_at ? 'Checked ' + new Date(data.checked_at).toUTCString() : '');
-      })
-      .catch(function () {
-        var names = recall();
-        // Always name the Hub, even on a first visit with nothing remembered:
-        // the failed fetch is direct evidence about it.
-        if (names.indexOf(HUB) === -1) {
-          names.unshift(HUB);
-        }
-        names.forEach(function (name) {
-          addRow(name, name === HUB ? 'down' : 'unknown');
-        });
-        services = { reachable: false, down: 1, degraded: 0, unknown: names.length - 1 };
-        // Hedged: from here, "the platform is unreachable" and "you cannot
-        // reach the platform" look identical.
-        show('Could not reach the platform. It may be down, or your network may be blocking it.');
       });
-  })();
+      services = tally;
+      try {
+        window.localStorage.setItem(CACHE_KEY, JSON.stringify(reported.map(function (s) { return s.name; })));
+      } catch (e) {
+        /* unavailable; the list just won't survive a failed load */
+      }
+      show(data.checked_at ? 'Checked ' + new Date(data.checked_at).toUTCString() : '');
+    })
+    .catch(function () {
+      var names = [];
+      try {
+        names = JSON.parse(window.localStorage.getItem(CACHE_KEY) || '[]')
+          .filter(function (n) { return typeof n === 'string'; });
+      } catch (e) {
+        /* nothing usable cached */
+      }
+      // Name the Hub even on a first visit with nothing cached: the failed fetch
+      // is direct evidence about it, and about nothing else.
+      if (names.indexOf(HUB) === -1) {
+        names.unshift(HUB);
+      }
+      names.forEach(function (name) {
+        addRow(name, name === HUB ? 'down' : 'unknown');
+      });
+      services = { reachable: false, down: 1, degraded: 0, unknown: names.length - 1 };
+      // Hedged: from here, "the platform is down" and "you cannot reach it" look
+      // identical.
+      show('Could not reach the platform. It may be down, or your network may be blocking it.');
+    });
 {% endif %}
 })();
 </script>

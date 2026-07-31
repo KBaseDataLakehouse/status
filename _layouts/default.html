@@ -36,12 +36,10 @@
   --bo-yellow: #ecdda4;
   --bo-red: #f3d4d0;
 
-  --s-1: 4px; --s-2: 6px; --s-3: 8px; --s-4: 10px; --s-5: 12px;
-  --s-6: 14px; --s-7: 18px; --s-8: 22px; --s-9: 26px; --s-10: 34px;
-  --s-11: 38px; --s-12: 50px;
+  --s-2: 6px; --s-3: 8px; --s-4: 10px; --s-5: 12px; --s-6: 14px;
+  --s-7: 18px; --s-9: 26px; --s-10: 34px; --s-11: 38px; --s-12: 50px;
 
-  --fs-2: 11px; --fs-3: 12px; --fs-4: 13px; --fs-5: 14px;
-  --fs-7: 16px; --fs-9: 18px;
+  --fs-3: 12px; --fs-4: 13px; --fs-5: 14px; --fs-7: 16px; --fs-9: 18px;
   --fs-hero: clamp(24px, 3.5vw, 30px);
 
   --r-sm: 4px; --r-md: 8px; --r-lg: 12px;
@@ -59,8 +57,8 @@ body {
 main { max-width: 46rem; margin: 0 auto; padding: var(--s-10) var(--s-7) var(--s-12); }
 h1 { font-size: var(--fs-hero); line-height: 1.25; text-wrap: balance; margin-bottom: var(--s-9); }
 
-/* Alert recipe: tint bg, tint border, darkened text-on-tint.
-   The green-yellow-red scale means service health and nothing else. */
+/* Green-yellow-red means service health and nothing else. No .banner--unknown
+   rule: the base style is already the neutral one. */
 .banner {
   display: flex;
   align-items: center;
@@ -99,7 +97,7 @@ h1 { font-size: var(--fs-hero); line-height: 1.25; text-wrap: balance; margin-bo
 .incident--resolved { background: transparent; }
 .incident--resolved .message { color: var(--c-ink3); }
 
-/* Chip recipe. Neutral by default; each modifier owns its colour. */
+/* Neutral by default; each modifier owns its colour. */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -113,8 +111,8 @@ h1 { font-size: var(--fs-hero); line-height: 1.25; text-wrap: balance; margin-bo
   color: var(--c-ink4);
 }
 
-/* Announcement lifecycle -- informational blue, deliberately outside the
-   health scale so a notice never reads as an outage. */
+/* Lifecycle: blue, deliberately outside the health scale so a notice never
+   reads as an outage. */
 .chip--current { background: var(--bg-primary); border-color: var(--bo-primary); color: var(--ct-primary); }
 .chip--scheduled { border-color: var(--bo-primary); color: var(--ct-primary); }
 .chip--resolved { border-color: var(--c-border2); color: var(--c-ink4); }

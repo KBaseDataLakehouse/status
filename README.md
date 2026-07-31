@@ -1,6 +1,6 @@
 # KBase Lakehouse Status
 
-Status page + machine-readable announcement feed. Follows
+Status page + machine-readable feed. Follows
 [`kbase/status`](https://github.com/kbase/status) — small Jekyll site on GitHub
 Pages, edited in the browser — plus a `status.json` that JupyterLab reads.
 
@@ -38,7 +38,7 @@ ends_at: "2026-08-02T13:00:00Z"   # RIGHT
 ```
 
 To retract early, set `ends_at` in the past — don't delete. The list is a
-history; resolved items stay on the page as a record.
+history; ended entries collapse into a "N resolved" section on the page.
 
 ### Fields
 
@@ -64,22 +64,38 @@ site's base URL; unset means no announcements and no errors.
   suppressed outage notice is not. A structurally broken entry is skipped
   individually so it cannot blank the feed.
 
+## Two axes, kept apart
+
+Announcements say what is *planned*; the service list says what is *broken*.
+Conflating them makes a scheduled-upgrade notice read as an outage.
+
+- **Banner colour is service health alone** — green/yellow/red, never touched by
+  announcements. No probe configured, or the probe not yet answered: neutral,
+  never green. Active announcements appear under it as a plain count.
+- **Announcement lifecycle** (Current / Scheduled / Resolved) is blue and
+  neutral, outside the health scale.
+- **Unknown is neutral**, not a severity rung.
+
 ## Layout
 
 | Path | Role |
 |---|---|
-| `_data/status.yml` | The only file you edit. Source for both outputs. |
-| `index.html` | Renders the history as a page. |
-| `_layouts/default.html` | Page shell and styles. No theme, no external assets. |
-| `status.json` | Same data as JSON. |
-| `_config.yml` | Title, description, status endpoint, expected service list. |
+| `_data/status.yml` | The only file you edit: `announcements` + `services_url`. |
+| `index.html` | Page markup and script. |
+| `_layouts/default.html` | Shell and styles. No theme, no external assets. |
+| `status.json` | `_data/status.yml` verbatim as JSON. |
+| `_config.yml` | Title and description. |
 
-State labels and the banner are computed twice: at build time so the page works
-without JavaScript, and in the browser so they are correct at view time.
+Announcement states and the open/resolved split are computed twice: in Liquid at
+build time so the page works without JavaScript, and again in the browser so
+labels track the reader's clock rather than the last commit. An entry whose
+window opened or closed since the build moves between the two lists on load.
 
-Per-service state comes from `GET /hub/status` on JupyterHub — the only
-component both publicly reachable and in-cluster. If that fetch fails,
-JupyterHub reads Down and the rest Unknown.
+Per-service rows are built entirely in the browser from `services_url` —
+`GET /hub/status` on JupyterHub, the only component both publicly reachable and
+in-cluster. There is no static service list to keep in sync; names from the last
+good response are cached in `localStorage`. If the fetch fails, JupyterHub reads
+Down (it serves that endpoint) and every remembered service Unknown.
 
 Built by GitHub Pages' own Jekyll — no Actions, no build step.
 
