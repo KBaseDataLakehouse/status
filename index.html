@@ -2,6 +2,7 @@
 layout: default
 ---
 {% assign entries = site.data.status.announcements %}
+{% assign services_url = site.data.status.services_url %}
 {% assign now = site.time | date: '%s' | plus: 0 %}
 
 {% comment %}
@@ -25,16 +26,23 @@ layout: default
 </li>
 {% endfor %}{% endcapture %}
 
-<div id="banner" class="banner{% if active_count > 0 %} banner--degraded{% endif %}">
+{% comment %}
+  Health is unknown until the probe answers, so the served banner claims
+  nothing. With no probe configured it stays neutral permanently -- announcement
+  counts are not a health signal and must never colour this green.
+{% endcomment %}
+<div id="banner" class="banner banner--unknown">
 <span class="dot"></span>
-<span id="banner-text">{% if active_count == 0 %}All systems operational{% elsif active_count == 1 %}1 active announcement{% else %}{{ active_count }} active announcements{% endif %}</span>
+<span class="banner__body">
+<span id="banner-text">{% if services_url and services_url != '' %}Checking services&hellip;{% elsif active_count == 0 %}No active announcements{% elsif active_count == 1 %}1 active announcement{% else %}{{ active_count }} active announcements{% endif %}</span>
+<span id="banner-note" class="banner__note" hidden></span>
+</span>
 </div>
 
 {% if entries and entries.size > 0 %}
 <ul class="incidents">{{ incident_items }}</ul>
 {% endif %}
 
-{% assign services_url = site.data.status.services_url %}
 {% if services_url and services_url != '' %}
 <section id="services" hidden>
 <h2 class="services__title">Services</h2>
@@ -50,42 +58,64 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
 
 <script>
 (function () {
-  // The banner is the worst of two signals: active announcements and live
-  // service state. Announcements alone must never let it read "operational"
-  // while a service is down -- that is the one lie this page cannot tell.
+  // Two orthogonal axes, kept apart on purpose:
+  //
+  //   health     ok / degraded / down / unknown, from the probe -- owns the
+  //              banner and the green-yellow-red scale outright.
+  //   lifecycle  Current / Scheduled / Resolved, from an announcement's time
+  //              window. Context, not severity: a notice about Tuesday's
+  //              upgrade is not degradation and must not colour the banner.
+  //
+  // So announcements appear as a subordinate count, never as a level.
+  var SERVICES_EXPECTED = {% if services_url and services_url != '' %}true{% else %}false{% endif %};
   var banner = document.getElementById('banner');
   var bannerText = document.getElementById('banner-text');
+  var bannerNote = document.getElementById('banner-note');
   var announcements = 0;
   var services = null; // set once the probe resolves
+
+  function plural(n, word) {
+    return n + ' ' + word + (n === 1 ? '' : 's');
+  }
 
   function renderBanner() {
     if (!banner || !bannerText) {
       return;
     }
-    var level = 'ok';
+    var level = 'unknown';
     var message;
 
-    if (services && !services.reachable) {
+    if (!SERVICES_EXPECTED) {
+      // No probe configured: no health signal exists, so claim none.
+      message = announcements ? plural(announcements, 'active announcement') : 'No active announcements';
+    } else if (!services) {
+      message = 'Checking services…';
+    } else if (!services.reachable) {
       level = 'down';
       message = 'Platform unreachable';
-    } else if (services && services.down) {
+    } else if (services.down) {
       level = 'down';
-      message = services.down + ' service' + (services.down === 1 ? '' : 's') + ' down';
-    } else if (services && services.degraded) {
+      message = plural(services.down, 'service') + ' down';
+    } else if (services.degraded) {
       level = 'degraded';
-      message = services.degraded + ' service' + (services.degraded === 1 ? '' : 's') + ' degraded';
-    } else if (services && services.unknown) {
-      level = 'degraded';
+      message = plural(services.degraded, 'service') + ' degraded';
+    } else if (services.unknown) {
+      // Neutral, not a severity rung: unknown is absence of information.
       message = 'Some services unknown';
-    } else if (announcements) {
-      level = 'degraded';
-      message = announcements + ' active announcement' + (announcements === 1 ? '' : 's');
     } else {
+      level = 'ok';
       message = 'All systems operational';
     }
 
-    banner.className = 'banner' + (level === 'ok' ? '' : ' banner--' + level);
+    banner.className = 'banner banner--' + level;
     bannerText.textContent = message;
+
+    if (bannerNote) {
+      // Suppressed when it would just restate the banner.
+      var show = announcements > 0 && SERVICES_EXPECTED;
+      bannerNote.textContent = show ? plural(announcements, 'active announcement') : '';
+      bannerNote.hidden = !show;
+    }
   }
 
   // Recompute announcement states against the reader's clock; the Liquid values

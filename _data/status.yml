@@ -22,14 +22,36 @@
 # where the rest lives. Blank drops the service list from the page.
 services_url: "https://hub.berdl.kbase.us/hub/status"
 
-announcements: []
+# ======================================================================
+# MOCK DATA — fabricated, for design review only. None of this happened.
+# Replace the whole list with `[]` before this page is linked anywhere.
+# ======================================================================
 
-# Copy this shape, newest at the top:
-#
-# announcements:
-#   - id: 2026-08-02-spark-restart
-#     message: >-
-#       Spark clusters restart Saturday 09:00–13:00 PT. Save your work;
-#       running jobs will be interrupted.
-#     starts_at: "2026-08-02T09:00:00Z"
-#     ends_at: "2026-08-02T13:00:00Z"
+announcements:
+  - id: 2026-08-02-polaris-migration
+    message: >-
+      Scheduled maintenance: Polaris catalog migration. Table metadata will be
+      read-only; queries continue to work but schema changes will fail.
+    starts_at: "2026-08-02T09:00:00Z"
+    ends_at: "2026-08-02T13:00:00Z"
+
+  - id: 2026-07-30-spark-connect-restart
+    message: >-
+      Spark Connect servers are restarting to pick up new catalog
+      configuration. Sessions drop once and reconnect automatically.
+    starts_at: "2026-07-30T22:00:00Z"
+    ends_at: "2026-07-31T04:00:00Z"
+
+  - id: 2026-07-24-trino-degraded
+    message: >-
+      Resolved: the Trino coordinator rejected queries under load for about two
+      hours. Spark queries were unaffected.
+    starts_at: "2026-07-24T14:10:00Z"
+    ends_at: "2026-07-24T16:25:00Z"
+
+  - id: 2026-07-18-s3-errors
+    message: >-
+      Resolved: elevated S3 error rates caused intermittent read failures. A
+      failed storage node was replaced.
+    starts_at: "2026-07-18T03:40:00Z"
+    ends_at: "2026-07-18T07:15:00Z"
