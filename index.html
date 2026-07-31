@@ -25,7 +25,7 @@ layout: default
 </li>
 {% endfor %}{% endcapture %}
 
-<div id="banner" class="banner{% if active_count > 0 %} banner--active{% endif %}">
+<div id="banner" class="banner{% if active_count > 0 %} banner--degraded{% endif %}">
 <span class="dot"></span>
 <span id="banner-text">{% if active_count == 0 %}All systems operational{% elsif active_count == 1 %}1 active announcement{% else %}{{ active_count }} active announcements{% endif %}</span>
 </div>
@@ -49,131 +49,175 @@ KBase-wide status at <a href="https://status.kbase.us/">status.kbase.us</a>
 </p>
 
 <script>
-// Recompute against the reader's clock; the Liquid values go stale as the
-// build ages.
 (function () {
-  var now = Date.now();
-  var active = 0;
-
-  document.querySelectorAll('.incident').forEach(function (el) {
-    var starts = Date.parse(el.dataset.startsAt || '');
-    var ends = Date.parse(el.dataset.endsAt || '');
-    // Absent or unparseable bound = unbounded on that side, matching how
-    // consumers of status.json treat it: fail toward visible.
-    var state = 'Current';
-    if (!isNaN(starts) && now < starts) {
-      state = 'Scheduled';
-    }
-    if (!isNaN(ends) && now >= ends) {
-      state = 'Resolved';
-    }
-    if (state === 'Current') {
-      active++;
-    }
-    el.classList.toggle('incident--resolved', state === 'Resolved');
-    var chip = el.querySelector('.chip');
-    if (chip) {
-      chip.textContent = state;
-      chip.className = 'chip chip--' + state.toLowerCase();
-    }
-  });
-
+  // The banner is the worst of two signals: active announcements and live
+  // service state. Announcements alone must never let it read "operational"
+  // while a service is down -- that is the one lie this page cannot tell.
   var banner = document.getElementById('banner');
-  var text = document.getElementById('banner-text');
-  if (banner && text) {
-    banner.classList.toggle('banner--active', active > 0);
-    text.textContent = active === 0
-      ? 'All systems operational'
-      : active + ' active announcement' + (active === 1 ? '' : 's');
+  var bannerText = document.getElementById('banner-text');
+  var announcements = 0;
+  var services = null; // set once the probe resolves
+
+  function renderBanner() {
+    if (!banner || !bannerText) {
+      return;
+    }
+    var level = 'ok';
+    var message;
+
+    if (services && !services.reachable) {
+      level = 'down';
+      message = 'Platform unreachable';
+    } else if (services && services.down) {
+      level = 'down';
+      message = services.down + ' service' + (services.down === 1 ? '' : 's') + ' down';
+    } else if (services && services.degraded) {
+      level = 'degraded';
+      message = services.degraded + ' service' + (services.degraded === 1 ? '' : 's') + ' degraded';
+    } else if (services && services.unknown) {
+      level = 'degraded';
+      message = 'Some services unknown';
+    } else if (announcements) {
+      level = 'degraded';
+      message = announcements + ' active announcement' + (announcements === 1 ? '' : 's');
+    } else {
+      message = 'All systems operational';
+    }
+
+    banner.className = 'banner' + (level === 'ok' ? '' : ' banner--' + level);
+    bannerText.textContent = message;
   }
-})();
+
+  // Recompute announcement states against the reader's clock; the Liquid values
+  // go stale as the build ages.
+  (function () {
+    var now = Date.now();
+    document.querySelectorAll('.incident').forEach(function (el) {
+      var starts = Date.parse(el.dataset.startsAt || '');
+      var ends = Date.parse(el.dataset.endsAt || '');
+      // Absent or unparseable bound = unbounded on that side, matching how
+      // consumers of status.json treat it: fail toward visible.
+      var state = 'Current';
+      if (!isNaN(starts) && now < starts) {
+        state = 'Scheduled';
+      }
+      if (!isNaN(ends) && now >= ends) {
+        state = 'Resolved';
+      }
+      if (state === 'Current') {
+        announcements++;
+      }
+      el.classList.toggle('incident--resolved', state === 'Resolved');
+      var chip = el.querySelector('.chip');
+      if (chip) {
+        chip.textContent = state;
+        chip.className = 'chip chip--' + state.toLowerCase();
+      }
+    });
+    renderBanner();
+  })();
 {% if services_url and services_url != '' %}
 
-// Service rows come from the endpoint itself -- there is no second list to keep
-// in sync. Names from the last good response are remembered locally, so when
-// the endpoint is unreachable the rows still appear: JupyterHub Down (it serves
-// the endpoint, so unreachable means unreachable Hub) and the rest Unknown,
-// since with the prober down nothing can be said about them.
-(function () {
-  var LABELS = { ok: 'Operational', degraded: 'Degraded', down: 'Down' };
-  var HUB = 'JupyterHub';
-  var REMEMBERED = 'berdl-status-services';
-  var section = document.getElementById('services');
-  var list = document.getElementById('services-list');
-  var checked = document.getElementById('services-checked');
-  if (!section || !list) {
-    return;
-  }
-
-  function remember(names) {
-    try {
-      window.localStorage.setItem(REMEMBERED, JSON.stringify(names));
-    } catch (e) {
-      /* unavailable; the list just won't survive a failed first load */
+  // Service rows come from the endpoint itself -- there is no second list to
+  // keep in sync. Names from the last good response are remembered locally, so
+  // an unreachable endpoint still renders rows: JupyterHub Down (it serves the
+  // endpoint, so unreachable means unreachable Hub) and the rest Unknown, since
+  // with the prober down nothing can be said about them.
+  (function () {
+    var LABELS = { ok: 'Operational', degraded: 'Degraded', down: 'Down', unknown: 'Unknown' };
+    var HUB = 'JupyterHub';
+    var REMEMBERED = 'berdl-status-services';
+    var section = document.getElementById('services');
+    var list = document.getElementById('services-list');
+    var checked = document.getElementById('services-checked');
+    if (!section || !list) {
+      return;
     }
-  }
 
-  function recall() {
-    try {
-      var parsed = JSON.parse(window.localStorage.getItem(REMEMBERED) || '[]');
-      return Array.isArray(parsed) ? parsed.filter(function (n) { return typeof n === 'string'; }) : [];
-    } catch (e) {
-      return [];
+    function remember(names) {
+      try {
+        window.localStorage.setItem(REMEMBERED, JSON.stringify(names));
+      } catch (e) {
+        /* unavailable; the list just won't survive a failed first load */
+      }
     }
-  }
 
-  function addRow(name, state) {
-    var li = document.createElement('li');
-    li.className = 'service';
-    var label = document.createElement('span');
-    label.textContent = name;
-    var chip = document.createElement('span');
-    // Unrecognized state shows verbatim in the neutral style rather than being
-    // coerced into "Operational".
-    chip.className = 'chip chip--service-' + (LABELS[state] ? state : 'unknown');
-    chip.textContent = LABELS[state] || state;
-    li.appendChild(label);
-    li.appendChild(chip);
-    list.appendChild(li);
-  }
-
-  function show(note) {
-    checked.textContent = note;
-    section.hidden = false;
-  }
-
-  fetch({{ services_url | jsonify }}, { cache: 'no-store' })
-    .then(function (response) {
-      if (!response.ok) {
-        throw new Error('HTTP ' + response.status);
+    function recall() {
+      try {
+        var parsed = JSON.parse(window.localStorage.getItem(REMEMBERED) || '[]');
+        return Array.isArray(parsed)
+          ? parsed.filter(function (n) { return typeof n === 'string'; })
+          : [];
+      } catch (e) {
+        return [];
       }
-      return response.json();
-    })
-    .then(function (data) {
-      var services = (data && data.services) || [];
-      if (!services.length) {
-        throw new Error('empty response');
-      }
-      services.forEach(function (s) {
-        addRow(s.name, s.state);
+    }
+
+    function addRow(name, state) {
+      var li = document.createElement('li');
+      li.className = 'service';
+      var label = document.createElement('span');
+      label.textContent = name;
+      var chip = document.createElement('span');
+      // Unrecognized state shows verbatim in the neutral style rather than
+      // being coerced into "Operational".
+      chip.className = 'chip chip--service-' + (LABELS[state] ? state : 'unknown');
+      chip.textContent = LABELS[state] || state;
+      li.appendChild(label);
+      li.appendChild(chip);
+      list.appendChild(li);
+    }
+
+    function show(note) {
+      checked.textContent = note;
+      section.hidden = false;
+      renderBanner();
+    }
+
+    fetch({{ services_url | jsonify }}, { cache: 'no-store' })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status);
+        }
+        return response.json();
+      })
+      .then(function (data) {
+        var reported = (data && data.services) || [];
+        if (!reported.length) {
+          throw new Error('empty response');
+        }
+        var tally = { reachable: true, down: 0, degraded: 0, unknown: 0 };
+        reported.forEach(function (s) {
+          addRow(s.name, s.state);
+          // An unrecognized state counts as unknown, not as healthy.
+          if (s.state === 'down') {
+            tally.down++;
+          } else if (s.state === 'degraded') {
+            tally.degraded++;
+          } else if (s.state !== 'ok') {
+            tally.unknown++;
+          }
+        });
+        services = tally;
+        remember(reported.map(function (s) { return s.name; }));
+        show(data.checked_at ? 'Checked ' + new Date(data.checked_at).toUTCString() : '');
+      })
+      .catch(function () {
+        var names = recall();
+        // Always name the Hub, even on a first visit with nothing remembered:
+        // the failed fetch is direct evidence about it.
+        if (names.indexOf(HUB) === -1) {
+          names.unshift(HUB);
+        }
+        names.forEach(function (name) {
+          addRow(name, name === HUB ? 'down' : 'unknown');
+        });
+        services = { reachable: false, down: 1, degraded: 0, unknown: names.length - 1 };
+        // Hedged: from here, "the platform is unreachable" and "you cannot
+        // reach the platform" look identical.
+        show('Could not reach the platform. It may be down, or your network may be blocking it.');
       });
-      remember(services.map(function (s) { return s.name; }));
-      show(data.checked_at ? 'Checked ' + new Date(data.checked_at).toUTCString() : '');
-    })
-    .catch(function () {
-      var names = recall();
-      // Always name the Hub, even on a first visit with nothing remembered:
-      // the failed fetch is direct evidence about it.
-      if (names.indexOf(HUB) === -1) {
-        names.unshift(HUB);
-      }
-      names.forEach(function (name) {
-        addRow(name, name === HUB ? 'down' : 'unknown');
-      });
-      // Hedged: from here, "the platform is unreachable" and "you cannot reach
-      // the platform" look identical.
-      show('Could not reach the platform. It may be down, or your network may be blocking it.');
-    });
-})();
+  })();
 {% endif %}
+})();
 </script>
